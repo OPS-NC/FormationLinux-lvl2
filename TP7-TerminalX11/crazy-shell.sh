@@ -22,6 +22,7 @@ sudo chsh -s "$(command -v zsh)" "$USER"
 echo "----------------------------------------------------------------------"
 echo "Choisissez votre thème OhMyZsh et changez le dans votre fichier .zshrc"
 echo "https://github.com/ohmyzsh/ohmyzsh/wiki/Themes"
+echo "Session graphique ouverte : déconnectez-vous et reconnectez-vous pour avoir zsh partout"
 echo "----------------------------------------------------------------------"
 
 exec zsh

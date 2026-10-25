@@ -100,7 +100,11 @@ bash crazy-shell.sh
 ```
 
 Le script finit dans zsh, qui est aussi devenu le shell de connexion (`sudo chsh`, sans mot
-de passe). ✅ Vérification, dans une nouvelle connexion : `echo $SHELL` → `/usr/bin/zsh`.
+de passe).
+
+⚠️ **Une session déjà ouverte garde l'ancien shell** : i3 a mémorisé `SHELL=/bin/bash` à la
+connexion, et ses terminaux continuent d'ouvrir bash. Déconnectez-vous d'i3 (`Mod+⇧+e`) puis
+reconnectez-vous. ✅ Dans un nouveau terminal : `echo $SHELL` → `/usr/bin/zsh`.
 
 ### Installation manuelle équivalente
 
@@ -276,7 +280,7 @@ deux panneaux, et éditer un fichier dans vim.
 |---|---|
 | Écran noir après `reboot` | `systemctl status lightdm`, `journalctl -b -u lightdm` ; en secours `Ctrl+Alt+F2` pour une console texte |
 | Fenêtre VirtualBox petite, pas de plein écran | VRAM trop faible : `VBoxManage modifyvm box01 --vram 128` (VM éteinte), puis `Host+G` |
-| `chsh` sans effet | Le changement s'applique **à la prochaine connexion**. Vérifier avec `grep "^$USER" /etc/passwd` |
+| `chsh` sans effet, le terminal ouvre bash | Le changement s'applique **à la prochaine connexion** : se déconnecter d'i3 (`Mod+⇧+e`) et se reconnecter. Vérifier avec `grep "^$USER" /etc/passwd` |
 | Caractères bizarres dans le thème zsh | Le thème `agnoster` exige une *Nerd Font*. Installer `fonts-powerline` ou changer de thème |
 | tmux : couleurs cassées | `export TERM=xterm-256color` dans `~/.zshrc` |
 | Pas de réseau en session graphique | `sudo apt install network-manager-gnome` puis lancer `nm-applet` |
