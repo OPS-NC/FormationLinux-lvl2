@@ -1,4 +1,4 @@
-# 📊 TP5 — Supervision & sauvegarde
+# 📊 TP6 — Supervision & sauvegarde
 
 ## 🎯 Objectif
 
@@ -16,13 +16,13 @@ c'est décider et agir sur ce qui est mesuré (Monit). Les deux sont complément
 
 ## 📋 Prérequis
 
-- Debian 13, session **root**
-- Le TP1 joué (le volume `/mnt/lvbtrfs` sert de destination de sauvegarde) — sinon, adaptez les chemins
-- Un port web joignable depuis votre poste (19999 pour Netdata, 2812 pour Monit)
+- VM **`box02`** du TP2 (le volume `/mnt/lvbtrfs` sert de destination de sauvegarde),
+  session **root** (`vagrant ssh box02` puis `sudo -i`)
 
 ```bash
+df -h /mnt/lvbtrfs            # ✅ le volume RAID du TP2 est monté
 apt update
-apt install -y curl rsync
+apt install -y curl rsync nginx
 ```
 
 ---
@@ -54,7 +54,7 @@ ss -tlnp | grep 19999
 curl -s localhost:19999/api/v1/info | head -20
 ```
 
-🌐 **Tableau de bord :** `http://IP_DU_SERVEUR:19999`
+🌐 **Tableau de bord :** `http://192.168.56.20:19999` (à la demande de connexion Netdata Cloud, choisir l'accès sans compte)
 
 Explorez : CPU, RAM, disques, réseau, et surtout la section **Applications** — Netdata
 détecte automatiquement nginx, systemd, et les services installés.
@@ -101,7 +101,12 @@ set httpd port 2812
 > ⚠️ `admin:monit` est un couple d'identifiants de démonstration. **Changez-le.** Et en
 > production, préférez `use address localhost` + tunnel SSH plutôt qu'une exposition publique.
 
-Par défaut, Monit vérifie tout **toutes les 30 secondes** (`set daemon 30` en haut du fichier).
+Debian livre Monit avec un cycle de **120 secondes** (`set daemon 120` en haut du fichier).
+Pour le TP, on le ramène à 30 secondes :
+
+```bash
+sed -i 's/^set daemon .*/set daemon 30/' /etc/monit/monitrc
+```
 
 ```bash
 # ✅ Valider la syntaxe AVANT de redémarrer
@@ -144,7 +149,7 @@ monit summary               # nginx doit apparaître en "OK"
 monit status nginx
 ```
 
-🌐 **Interface web :** `http://IP_DU_SERVEUR:2812` (admin / monit)
+🌐 **Interface web :** `http://192.168.56.20:2812` (admin / monit)
 
 ### 🧪 Le test qui prouve que ça marche
 
@@ -159,7 +164,7 @@ sleep 70
 # ✅ Monit l'a relancé tout seul
 systemctl is-active nginx
 ss -tlnp | grep :80
-journalctl -u monit -n 20 --no-pager
+tail /var/log/monit.log         # 'nginx' process is not running → trying to restart
 ```
 
 ### Autres sondes utiles
@@ -293,19 +298,6 @@ apt install -y restic
 restic version
 ```
 
-<details>
-<summary>Variante : installation manuelle de la dernière version depuis GitHub</summary>
-
-```bash
-cd /tmp
-VERSION=0.18.0
-wget "https://github.com/restic/restic/releases/download/v${VERSION}/restic_${VERSION}_linux_amd64.bz2"
-bzip2 -d "restic_${VERSION}_linux_amd64.bz2"
-chmod +x "restic_${VERSION}_linux_amd64"
-mv "restic_${VERSION}_linux_amd64" /usr/local/bin/restic
-restic version
-```
-</details>
 
 ### Initialiser le dépôt
 

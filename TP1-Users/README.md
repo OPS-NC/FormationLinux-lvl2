@@ -1,4 +1,4 @@
-# 👥 TP — Utilisateurs, groupes, `sudo` et permissions
+# 👥 TP1 — Utilisateurs, groupes, `sudo` et permissions
 
 ## 🎯 Objectif
 
@@ -14,7 +14,7 @@ un répertoire de travail partagé.
                                     │
                                     ▼
                   /opt/appli-dev   root:developer   2775
-                  (setgid + umask + ACL = écriture collaborative)
+                  (setgid + umask = écriture collaborative)    
 ```
 
 | Volet | Ce que vous apprenez |
@@ -23,7 +23,7 @@ un répertoire de travail partagé.
 | 👤 **Comptes** | `groupadd`, `useradd`, groupe **principal** vs **secondaire**, `id` |
 | 🔑 **`sudo`** | Anatomie d'une règle, `sudoers.d`, `visudo`, restriction par commande |
 | ⚠️ **Évasions** | Pourquoi `sudo systemctl` **sans restriction = root complet** |
-| 🔒 **Permissions** | `chmod` / `chown`, bits spéciaux **setgid** et **sticky**, `umask`, ACL POSIX |
+| 🔒 **Permissions** | `chmod` / `chown`, bits spéciaux **setgid** et **sticky**, `umask` |
 
 💡 **Le fil rouge du TP.** Sous Linux, un droit n'est jamais accordé à une *personne* mais à un
 **UID** et à un **jeu de GID**. Tout ce qui suit — `sudo` compris — n'est qu'une manière
@@ -33,22 +33,19 @@ d'exprimer des règles sur ces nombres.
 
 ## 📋 Prérequis
 
-- Debian 13, session **root** — `sudo -i` si votre compte est dans le groupe `sudo`, sinon
-  `su -` (l'installateur Debian propose l'un **ou** l'autre : si vous avez donné un mot de
-  passe à root, `sudo` n'est probablement même pas installé)
-- ⚠️ Un **snapshot de la VM** : on modifie `/etc/passwd`, `/etc/sudoers.d` et `/opt`.
-  Une erreur de syntaxe dans `sudoers` peut vous **verrouiller hors de `sudo`**.
-- Deux terminaux, c'est plus confortable : un en `root`, un pour tester en tant qu'`alice` / `bob`
+- VM `box01` neuve ([LAB.md](../LAB.md)), session **root** : `vagrant ssh box01` puis `sudo -i`
+- ⚠️ Un snapshot : `vagrant snapshot save box01 tp1`. Une erreur de syntaxe dans `sudoers`
+  peut vous **verrouiller hors de `sudo`**.
+- Deux terminaux (deux `vagrant ssh box01`) : un en `root`, un pour tester en tant qu'`alice` / `bob`
 
 ```bash
 apt update
-apt install -y sudo acl members
+apt install -y sudo members
 ```
 
 | Paquet | Rôle |
 |---|---|
 | `sudo` | L'outil de délégation lui-même |
-| `acl` | `getfacl` / `setfacl` — permissions fines de la partie 5 |
 | `members` | Liste les membres d'un groupe (pratique, pas indispensable) |
 
 > ⚠️ **Filet de sécurité.** Avant de toucher à `sudo`, gardez **un shell root déjà ouvert**
@@ -115,7 +112,7 @@ grep -E '^(sudo|adm):' /etc/group
 ```
 
 ```
-sudo:x:27:valentin
+sudo:x:27:vagrant
 │    │ │  └─ 4. membres SECONDAIRES (liste séparée par des virgules)
 │    │ └──── 3. GID
 │    └─────── 2. mot de passe de groupe (dans /etc/gshadow) — quasi inutilisé
@@ -179,8 +176,8 @@ developer:x:1002:
 >
 > Et ça se prouve — cherchons une règle qui mentionnerait `admin` :
 > ```bash
-> grep -rn '%admin\|%sudo' /etc/sudoers /etc/sudoers.d/ 2>/dev/null
-> # -> /etc/sudoers:NN:%sudo   ALL=(ALL:ALL) ALL      ← une seule ligne, pour 'sudo'
+> grep -rnE '^%(admin|sudo)' /etc/sudoers /etc/sudoers.d/
+> # -> /etc/sudoers:50:%sudo   ALL=(ALL:ALL) ALL      ← une seule ligne, pour 'sudo'
 > ```
 > 💡 Sur d'autres distributions, le résultat diffère : **Ubuntu livre historiquement une ligne
 > `%admin ALL=(ALL) ALL`** dans son `/etc/sudoers`. Y créer un groupe `admin` lui donnerait
@@ -236,7 +233,7 @@ id bob
 ```
 
 ```
-uid=1001(alice) gid=1001(alice) groups=1001(alice),1001(admin)
+uid=1001(alice) gid=1003(alice) groups=1003(alice),1001(admin)
                 └──────┬──────┘ └────────────┬──────────────┘
               groupe PRINCIPAL        TOUS les groupes
 ```
@@ -272,37 +269,23 @@ members developer             # les membres du groupe (paquet 'members')
 getent group developer        # la ligne brute de /etc/group
 lslogins -u                   # tableau de tous les comptes humains
 ls -la /home/bob              # ✅ le home existe, avec les fichiers de /etc/skel
-stat -c '%U:%G %a' /home/bob  # -> bob:bob 755   ⚠️ voir ci-dessous
+stat -c '%U:%G %a' /home/bob  # -> bob:bob 700
 ```
 
-⚠️ **`755` sur un répertoire personnel : le piège de `useradd` sous Debian.** Les deux outils
-ne calculent pas le mode de la même façon :
+💡 **Qui fixe ce `700` ?** Les deux outils ne lisent pas le même fichier :
 
-| Outil | Source du mode | Résultat sur Debian 13 |
-|---|---|---|
-| `useradd -m` | **`HOME_MODE`** de `/etc/login.defs` — **et s'il est absent, `0777 & ~UMASK`** | `UMASK 022` → **`755`** : le home est lisible par **tout le monde** |
-| `adduser` | **`DIR_MODE`** de `/etc/adduser.conf` | `0700` depuis Debian 12 |
+| Outil | Source du mode |
+|---|---|
+| `useradd -m` | **`HOME_MODE`** de `/etc/login.defs` (`0700` sur Debian 13) — s'il est absent : `0777 & ~UMASK`, soit `755` |
+| `adduser` | **`DIR_MODE`** de `/etc/adduser.conf` (`0700`) |
 
 ```bash
-grep -E '^(UMASK|HOME_MODE)' /etc/login.defs      # HOME_MODE est-il défini ?
-grep -E '^DIR_MODE' /etc/adduser.conf             # -> DIR_MODE=0700
+grep -E '^HOME_MODE' /etc/login.defs     # -> HOME_MODE 0700
+grep -E '^DIR_MODE' /etc/adduser.conf    # -> DIR_MODE=0700
 ```
 
-💡 **Debian n'active pas `HOME_MODE` par défaut** : `adduser` (l'outil recommandé sous Debian)
-lit `adduser.conf` et **ignore complètement `login.defs`**. Un script qui utilise `useradd`
-crée donc des `$HOME` en `755` sans que personne ne le remarque. Deux corrections :
-
-```bash
-# Correction immédiate
-chmod 700 /home/alice /home/bob
-
-# Correction durable, pour tous les comptes créés ensuite
-echo 'HOME_MODE 0700' >> /etc/login.defs
-```
-
-✅ C'est la première démonstration concrète du tableau `adduser` vs `useradd` du §2.2 : le
-binaire bas niveau ne fait *que* ce qu'on lui demande — y compris quand ce n'est pas ce
-qu'on voulait.
+⚠️ Sur des distributions plus anciennes (Debian ≤ 12), `HOME_MODE` n'est pas défini : un
+script basé sur `useradd` y crée des homes en `755`, lisibles par tous.
 
 ## 2.6 — Politique de mot de passe (`chage`)
 
@@ -623,7 +606,7 @@ sudo -l
 ```
 
 ```
-User bob may run the following commands on debian:
+User bob may run the following commands on box01:
     (root) NOPASSWD: /usr/bin/systemctl status *, ...
     (root) PASSWD: /usr/bin/systemctl start nginx, ...
 ```
@@ -657,7 +640,7 @@ sudo -u alice whoami       # refusé  ← la règle dit (root), pas (ALL)
 Message type :
 
 ```
-Sorry, user bob is not allowed to execute '/usr/bin/su' as root on debian.
+Sorry, user bob is not allowed to execute '/usr/bin/su' as root on box01.
 ```
 
 ✅ **Ces sept refus sont le vrai résultat du TP.** Une politique `sudo` ne se juge pas à ce
@@ -848,8 +831,8 @@ su - bob -c 'chgrp developer /tmp/essai && ls -l /tmp/essai'
 ## 5.1 — Le problème à résoudre
 
 > Les développeurs (`developer`) travaillent à plusieurs dans `/opt/appli-dev`. Chacun doit
-> pouvoir **modifier et supprimer les fichiers des autres**. Les administrateurs (`admin`)
-> doivent pouvoir **tout lire** pour auditer, mais rien écrire. Personne d'autre n'entre.
+> pouvoir **modifier et supprimer les fichiers des autres**. Personne d'autre n'entre : les
+> administrateurs (`admin`) passent par `sudo`, donc de façon tracée.
 
 💡 **Pourquoi `/opt` ?** La norme **FHS** réserve `/opt` aux logiciels « add-on » installés
 hors gestionnaire de paquets — typiquement les applications maison. `/srv` est destiné aux
@@ -923,12 +906,7 @@ find /opt/appli-dev -type d -exec chmod g+s {} +   # setgid sur tous les répert
 
 ## 5.4 — ⭐ Le `umask` : le setgid ne suffit pas
 
-Le groupe est bon, mais est-il autorisé à **écrire** ?
-
-```bash
-ls -l /opt/appli-dev/src/essai.py
-# -rw-r--r-- 1 bob developer …    ← ⚠️ le groupe n'a que 'r' : alice ne peut pas modifier
-```
+Le groupe est bon, mais est-il autorisé à **écrire** ? C'est le `umask` qui le décide.
 
 💡 **Le `umask` est un masque de bits *retirés*** aux permissions par défaut (`666` pour un
 fichier, `777` pour un répertoire — un fichier n'est jamais créé exécutable) :
@@ -941,39 +919,21 @@ fichier, `777` pour un répertoire — un fichier n'est jamais créé exécutabl
 | `077` | `600` | `700` | Strictement privé |
 
 ```bash
-su - bob -c 'umask'      # -> 0022 sur une Debian par défaut
+umask                    # root   -> 0022
+su - bob -c 'umask'      # bob    -> 0002
+ls -l /opt/appli-dev/src/essai.py   # -> -rw-rw-r-- bob developer   ✅ le groupe peut écrire
 ```
 
-**Appliquer `002` aux seuls développeurs :**
+💡 **Pourquoi `002` pour bob ?** Sous Debian 13, `pam_umask` (`/etc/pam.d/common-session`)
+applique `USERGROUPS_ENAB yes` de `/etc/login.defs` : un compte qui a son propre groupe
+(schéma UPG) reçoit `002`. C'est sûr, puisque ce groupe ne contient que lui.
 
-```bash
-cat > /etc/profile.d/umask-developer.sh <<'EOF'
-# Écriture collaborative pour les membres du groupe developer.
-# Sûr grâce au schéma UPG (User Private Group) : le groupe principal de chaque
-# utilisateur ne contient que lui-même, un umask 002 n'expose donc rien.
-if id -nG | tr ' ' '\n' | grep -qx developer; then
-    umask 002
-fi
-EOF
-chmod 644 /etc/profile.d/umask-developer.sh
-```
+⚠️ **Les limites du `umask`, à connaître :**
 
-✅ Vérification :
-
-```bash
-su - bob -c 'umask; touch /opt/appli-dev/src/essai2.py'
-ls -l /opt/appli-dev/src/essai2.py
-# -> 0002  puis  -rw-rw-r-- 1 bob developer   ✅ le groupe peut écrire
-```
-
-⚠️ **Les limites de cette approche, à connaître :**
-
-- `/etc/profile.d/` n'est lu que par les **shells de connexion**. Un service systemd, une
-  tâche `cron` ou un `scp` n'en tiennent pas compte. Pour ces cas : `UMask=0002` dans l'unité
-  systemd, ou `pam_umask`.
-- Le `umask` est un réglage **par processus**, pas par répertoire. Un développeur peut le
-  changer. C'est là qu'intervient l'ACL par défaut (§5.6), qui s'impose au système de fichiers
-  et non au shell.
+- Il ne s'applique qu'aux **sessions PAM** (connexion, `su -`, SSH). Un service systemd ne
+  passe pas par là : `UMask=0002` dans l'unité.
+- C'est un réglage **par processus**, pas par répertoire. N'importe qui peut taper
+  `umask 022`.
 
 ## 5.5 — Le sticky bit : un dépôt commun sans casse
 
@@ -1006,7 +966,7 @@ drwxrwsr-t 2 root developer 4096 … /opt/appli-dev/depot
 usermod -aG developer alice              # alice rejoint temporairement developer
 su - bob   -c 'echo "à bob" > /opt/appli-dev/depot/fichier-bob.txt'
 
-# alice peut LIRE et MODIFIER (groupe developer + umask 002)
+# alice peut LIRE (groupe developer)
 su - alice -c 'cat /opt/appli-dev/depot/fichier-bob.txt'
 
 # …mais pas SUPPRIMER : le sticky bit protège
@@ -1030,73 +990,15 @@ gpasswd -d alice developer               # on retire alice de developer
 aussi ; **majuscule = il est absent**. Un `drwxrwS--T` signale un setgid sur un répertoire non
 traversable par son groupe : presque toujours une erreur.
 
-## 5.6 — Les ACL POSIX : au-delà de `ugo`
+## 5.6 — ✅ La matrice de validation
 
-Le modèle `ugo` n'a **qu'un seul groupe** par fichier. Or notre cahier des charges en demande
-deux : `developer` en écriture **et** `admin` en lecture. Impossible avec `chmod` seul — c'est
-précisément le cas d'usage des **ACL**.
-
-```bash
-# Le groupe developer : lecture + écriture (X = x seulement sur les répertoires)
-setfacl -R -m g:developer:rwX /opt/appli-dev
-
-# Le groupe admin : lecture seule, pour l'audit
-setfacl -R -m g:admin:rX     /opt/appli-dev
-
-# ⭐ Les ACL « par défaut » (-d) : héritées par tout ce qui SERA créé ensuite
-setfacl -R -d -m g:developer:rwX /opt/appli-dev
-setfacl -R -d -m g:admin:rX      /opt/appli-dev
-
-getfacl /opt/appli-dev
-```
-
-```
-# file: opt/appli-dev
-# owner: root
-# group: developer
-# flags: -s-                       ← le setgid apparaît ici
-user::rwx
-group::rwx
-group:developer:rwx                ← ACL nommée
-group:admin:r-x                    ← ACL nommée
-mask::rwx                          ← ⚠️ plafond des permissions effectives
-other::r-x
-default:group:developer:rwx        ← héritée par les nouveaux fichiers
-default:group:admin:r-x
-```
+Le cahier des charges dit « personne d'autre n'entre » : notre `2775` laisse encore `r-x`
+aux autres. On le ferme :
 
 ```bash
-ls -ld /opt/appli-dev
-# drwxrwsr-x+ ...
-#           ↑ le '+' signale la présence d'ACL — c'est le seul indice dans un ls
+chmod 2770 /opt/appli-dev
+ls -ld /opt/appli-dev          # -> drwxrws--- root developer
 ```
-
-⚠️ **Le `mask` est le piège n°1 des ACL.** C'est un **plafond** : la permission effective
-d'une ACL nommée est l'intersection de l'ACL et du masque. Or… **`chmod g+X` ou `chmod 750`
-réécrit le masque** et peut donc annuler silencieusement toutes vos ACL de groupe.
-`getfacl` l'annonce alors explicitement :
-
-```
-group:developer:rwx        #effective:r-x
-```
-
-💡 **Après un `chmod` sur un répertoire porteur d'ACL, relisez toujours `getfacl`.**
-
-**Les commandes ACL à retenir :**
-
-```bash
-getfacl -R /opt/appli-dev > /root/acl-appli-dev.txt   # sauvegarder
-setfacl --restore=/root/acl-appli-dev.txt             # restaurer
-setfacl -x  g:admin /opt/appli-dev                    # retirer une ACL
-setfacl -b  -R /opt/appli-dev                         # tout effacer (back to ugo)
-setfacl -k  -R /opt/appli-dev                         # effacer les ACL par défaut
-```
-
-> ⚠️ **`cp` et `tar` perdent les ACL par défaut.** Utilisez `cp -a` (ou `--preserve=all`),
-> `rsync -aA`, `tar --acls`. Sinon votre restauration de sauvegarde effacera toute la
-> configuration de cette partie — un incident classique.
-
-## 5.7 — ✅ La matrice de validation
 
 C'est le test qui prouve que le montage complet fonctionne :
 
@@ -1110,22 +1012,17 @@ echo "--- bob (developer) : doit pouvoir écrire ---"
 su - bob   -c 'echo "# modif bob" >> /opt/appli-dev/src/app.py && echo OK-ecriture'
 su - bob   -c 'mkdir -p /opt/appli-dev/src/module && ls -ld /opt/appli-dev/src/module'
 
-echo "--- alice (admin) : doit pouvoir lire, PAS écrire ---"
-su - alice -c 'cat /opt/appli-dev/src/app.py >/dev/null && echo OK-lecture'
-su - alice -c 'echo "modif alice" >> /opt/appli-dev/src/app.py' \
-  || echo "OK-ecriture-refusee (attendu)"
+echo "--- alice (admin) : n'entre pas sans sudo ---"
+su - alice -c 'ls /opt/appli-dev' || echo "OK-acces-refuse (attendu)"
 
 echo "--- nobody : ne doit rien pouvoir faire ---"
-# Notre 2775 laissait 'r-x' aux autres. Le cahier des charges dit « personne
-# d'autre n'entre » : on ferme donc les droits 'other'.
-setfacl -m o::--- /opt/appli-dev
 su -s /bin/bash nobody -c 'ls /opt/appli-dev' || echo "OK-acces-refuse (attendu)"
 ```
 
 | Acteur | Lire | Écrire | Supprimer un fichier tiers | Entrer |
 |---|---|---|---|---|
 | `bob` (developer) | ✅ | ✅ | ✅ (sauf dans `depot/`) | ✅ |
-| `alice` (admin) | ✅ | ❌ | ❌ | ✅ |
+| `alice` (admin) | ❌ | ❌ | ❌ | ❌ (✅ via `sudo`, tracé) |
 | `nobody` (autres) | ❌ | ❌ | ❌ | ❌ |
 | `root` | ✅ | ✅ | ✅ | ✅ |
 
@@ -1134,7 +1031,7 @@ su -s /bin/bash nobody -c 'ls /opt/appli-dev' || echo "OK-acces-refuse (attendu)
 protection vient de *l'accès restreint à root lui-même* — soit exactement le travail de la
 partie 3.
 
-## 5.8 — Diagnostiquer un « Permission denied »
+## 5.7 — Diagnostiquer un « Permission denied »
 
 Un refus vient **presque toujours d'un répertoire parent**, pas du fichier visé. L'outil
 adapté :
@@ -1147,7 +1044,7 @@ namei -l /opt/appli-dev/src/app.py
 f: /opt/appli-dev/src/app.py
  drwxr-xr-x root root      /
  drwxr-xr-x root root      opt
- drwxrwsr-x root developer appli-dev      ← chaque maillon doit être traversable (x)
+ drwxrws--- root developer appli-dev      ← chaque maillon doit être traversable (x)
  drwxrwsr-x root developer src
  -rw-rw-r-- bob  developer app.py
 ```
@@ -1161,16 +1058,13 @@ namei -l /opt/appli-dev/src/app.py
 # 2. Les droits et bits spéciaux exacts
 stat /opt/appli-dev/src/app.py
 
-# 3. Des ACL entrent-elles en jeu ? (le '+' de ls -l)
-getfacl /opt/appli-dev/src/app.py
-
-# 4. L'utilisateur est-il vraiment dans le groupe ? ⚠️ voir l'encadré ci-dessous
+# 3. L'utilisateur est-il vraiment dans le groupe ? ⚠️ voir l'encadré ci-dessous
 id bob
 
-# 5. Simuler l'accès réellement
+# 4. Simuler l'accès réellement
 sudo -u bob test -w /opt/appli-dev/src/app.py && echo accessible || echo refusé
 
-# 6. Toujours refusé ? Chercher au-delà des permissions
+# 5. Toujours refusé ? Chercher au-delà des permissions
 lsattr /opt/appli-dev/src/app.py     # attribut 'i' (immuable) → même root est bloqué
 mount | grep -E ' / | /opt '         # montage en 'ro' ? option 'noexec' ?
 journalctl -k -n 20                  # AppArmor / SELinux ?
@@ -1197,7 +1091,7 @@ journalctl -k -n 20                  # AppArmor / SELinux ?
 2. **Restreindre encore** — modifiez `20-developer` pour que bob ne puisse redémarrer
    **que** `appli-dev`, plus `nginx`. Prouvez-le par un refus.
 3. **La rotation des journaux** — `logs/` doit être écrit par le service et lu par
-   `developer` et `admin`, sans que personne d'autre y accède. Quels droits ? Quelles ACL ?
+   `developer`, sans que personne d'autre y accède. Quels propriétaire, groupe et droits ?
 4. **L'audit** — écrivez une commande unique qui liste tous les fichiers de `/opt`
    accessibles en écriture par « les autres » (`find -perm -o+w`). Pourquoi est-ce grave ?
 5. **Le départ de bob** — bob quitte l'entreprise. Établissez la procédure complète :
@@ -1216,7 +1110,6 @@ journalctl -k -n 20                  # AppArmor / SELinux ?
 ```bash
 # ⚠️ Détruit les comptes, leurs fichiers personnels et les règles sudo
 rm -f /etc/sudoers.d/10-admin /etc/sudoers.d/20-developer
-rm -f /etc/profile.d/umask-developer.sh
 visudo -c                       # ✅ toujours revalider après suppression
 
 pkill -u alice ; pkill -u bob   # fermer les sessions ouvertes
@@ -1247,13 +1140,10 @@ révèle les orphelins laissés derrière.
 | `grep: /var/log/auth.log: No such file or directory` | `rsyslog` n'est plus installé depuis Debian 12 | `journalctl -t sudo` ; installer `rsyslog` seulement si les fichiers texte sont nécessaires |
 | Les journaux disparaissent après un redémarrage | `/var/log/journal` absent → journal en RAM | `mkdir -p /var/log/journal` puis `systemctl restart systemd-journald` |
 | `You are required to change your password immediately` à chaque `su - bob` | `chage -d 0` a été joué trop tôt | `chage -M 90 bob` pour rétablir la politique |
-| `/home/bob` est en `755` | `useradd` utilise `UMASK` faute de `HOME_MODE` | `chmod 700 /home/bob` + `echo 'HOME_MODE 0700' >> /etc/login.defs` |
 | `id` ne montre pas le nouveau groupe | Groupes figés à la connexion | Se reconnecter, ou `newgrp GROUPE` |
 | `grep developer /etc/group` ne montre personne | Ce sont des membres **principaux** | Utiliser `id UTILISATEUR` ou `getent group` |
 | Fichiers créés avec le mauvais groupe | Setgid absent sur le répertoire | `chmod g+s RÉPERTOIRE` puis corriger l'existant (`chown -R :GROUPE`) |
-| Groupe correct, mais écriture refusée | `umask` à `022` → fichiers en `644` | `umask 002` (voir §5.4) ou ACL par défaut (§5.6) |
-| ACL présente mais sans effet | Le `mask` la plafonne | `getfacl` (voir `#effective:`) ; un `chmod` a réécrit le masque |
-| ACL disparues après restauration | `cp` / `tar` sans option ACL | `cp -a`, `rsync -aA`, `tar --acls` |
+| Groupe correct, mais écriture refusée | `umask` à `022` → fichiers en `644` | `chmod g+w` ; `UMask=0002` pour un service |
 | `Permission denied` incompréhensible | Un **répertoire parent** bloque | `namei -l CHEMIN` |
 | Même root ne peut pas écrire | Attribut immuable, ou montage `ro` | `lsattr`, `chattr -i` ; vérifier `mount` |
 | `userdel: user bob is currently used by process` | Sessions ou services actifs | `pkill -u bob`, `loginctl terminate-user bob` |
@@ -1276,6 +1166,4 @@ révèle les orphelins laissés derrière.
 7. `visudo -c` après **chaque** modification, et un shell root ouvert à côté.
 8. Le partage de fichiers = **setgid** (le bon groupe) **+ `umask 002`** (le bon droit
    d'écriture). Les deux, pas l'un ou l'autre.
-9. Deux groupes sur un même arbre → **ACL POSIX**, avec l'ACL `default:` pour l'héritage —
-   et une relecture de `getfacl` après tout `chmod`.
-10. Face à un `Permission denied` : **`namei -l`** avant toute chose.
+9. Face à un `Permission denied` : **`namei -l`** avant toute chose.

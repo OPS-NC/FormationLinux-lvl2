@@ -1,4 +1,4 @@
-# 🧩 TP2 — Modules du noyau Linux
+# 🧩 TP3 — Modules du noyau Linux
 
 ## 🎯 Objectif
 
@@ -15,23 +15,24 @@ segfault mais un **kernel panic** : on travaille en VM.
 
 ## 📋 Prérequis
 
-- Debian 13 (noyau 6.12), session **root**
-- Snapshot de la VM ⚠️ (un module bugué peut figer la machine)
+- VM `box01` neuve, session **root** (`vagrant ssh box01` puis `sudo -i`)
+- Snapshot ⚠️ (un module bugué peut figer la machine) : `vagrant snapshot save box01 tp3`
+
+Les en-têtes doivent correspondre **exactement** au noyau qui tourne. Or la box Vagrant est
+livrée avec un noyau plus ancien que celui des dépôts : `linux-headers-$(uname -r)` est
+introuvable. On met donc le noyau à jour, puis on redémarre :
 
 ```bash
 apt update
-apt install -y build-essential linux-headers-$(uname -r)
+apt install -y build-essential linux-image-amd64 linux-headers-amd64
+exit                               # puis, depuis le poste : vagrant reload box01
+```
 
-# Vérifier que les en-têtes correspondent bien au noyau qui tourne
+```bash
+# ✅ De retour dans la VM (sudo -i) : en-têtes et noyau alignés
 uname -r
 ls -d /lib/modules/$(uname -r)/build
 ```
-
-> ⚠️ **Secure Boot.** Si votre machine démarre en UEFI avec Secure Boot **activé**, le noyau
-> refusera de charger un module non signé :
-> `insmod: ERROR: could not insert module: Key was rejected by service`.
-> Vérifiez l'état avec `mokutil --sb-state`. Pour ce TP, désactivez Secure Boot dans le
-> firmware de la VM.
 
 ---
 
@@ -64,7 +65,9 @@ module_exit(lkm_example_exit);
 ### Compilation
 
 ```bash
-cd TP2-Kernel/Module1
+# On compile hors du dossier partagé /vagrant
+cp -r /vagrant/FormationLinux-lvl2/TP3-Kernel ~/
+cd ~/TP3-Kernel/Module1
 make
 ```
 
@@ -152,7 +155,7 @@ make test
 ```
 
 ✅ Relevez le **numéro majeur** dans la sortie :
-`lkm_example module loaded with device major number 236`
+`lkm_example module loaded with device major number 244`
 
 ### Créer le fichier de périphérique
 
@@ -308,8 +311,7 @@ modprobe -r loop
 
 | Erreur | Cause | Solution |
 |---|---|---|
-| `make: *** /lib/modules/.../build: Aucun fichier` | En-têtes absents ou décalés du noyau courant | `apt install linux-headers-$(uname -r)`, puis rebooter si le noyau vient d'être mis à jour |
-| `Key was rejected by service` | Secure Boot actif | Le désactiver dans le firmware de la VM |
+| `Unable to locate package linux-headers-…` / `make: *** /lib/modules/.../build` | En-têtes absents ou décalés du noyau courant | `apt install linux-image-amd64 linux-headers-amd64` puis `vagrant reload box01` |
 | `Invalid module format` | Module compilé pour un autre noyau | `modinfo ./x.ko` → comparer `vermagic` avec `uname -r`, puis recompiler |
 | `File exists` au `insmod` | Le module est déjà chargé | `rmmod` d'abord, ou `lsmod \| grep lkm` pour vérifier |
 | `Module lkm2 is in use` | Un `cat /dev/lkm2` tourne encore | Fermer le processus, `rm /dev/lkm2`, puis `rmmod` |

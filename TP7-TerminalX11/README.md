@@ -1,4 +1,4 @@
-# 🖥️ TP6 — Environnement graphique & terminal de l'admin sys
+# 🖥️ TP7 — Environnement graphique & terminal de l'admin sys
 
 ## 🎯 Objectif
 
@@ -17,9 +17,22 @@ confort/ressources imbattable.
 
 ## 📋 Prérequis
 
-- Debian 13, session **root** pour les installations
-- ⚠️ Accès **console** à la VM (l'affichage graphique ne passe pas par SSH)
-- ~1 Go d'espace disque
+- VM `box01` neuve, session **root** pour les installations (`vagrant ssh box01` puis `sudo -i`)
+- ⚠️ L'affichage graphique ne passe pas par SSH : dans VirtualBox, sélectionnez `box01` puis
+  **Afficher** pour ouvrir sa console. Compte : `vagrant` / `vagrant`
+
+**Plein écran.** Les Guest Additions sont déjà dans la box : l'écran suit la taille de la
+fenêtre. Il faut seulement assez de mémoire vidéo (33 Mo par défaut, trop peu au-delà du
+1920×1080). Depuis le poste, VM éteinte :
+
+```bash
+vagrant halt box01
+VBoxManage modifyvm box01 --vram 128
+vagrant up box01
+```
+
+Puis, dans la fenêtre de la VM : **Écran → Ajuster automatiquement la taille de l'écran
+invité** (`Host+G`) et **Plein écran** (`Host+F`). `Host` = `Ctrl` droit par défaut.
 
 ---
 
@@ -42,14 +55,12 @@ apt install -y xorg i3 suckless-tools xterm thunar lightdm dbus-x11 \
 | `dbus-x11` | Bus de messages, requis par beaucoup d'applications |
 | `feh` | Fond d'écran |
 
-> 💡 L'installateur demande de choisir le *display manager* : sélectionnez **lightdm**.
-
 ```bash
 systemctl enable lightdm
-reboot
+exit                       # puis, depuis le poste : vagrant reload box01
 ```
 
-Au premier lancement d'i3, un assistant propose de générer `~/.config/i3/config` et de choisir
+Dans la console VirtualBox, connectez-vous (`vagrant` / `vagrant`). Au premier lancement d'i3, un assistant propose de générer `~/.config/i3/config` et de choisir
 la **touche Mod** : `Win` (recommandé) ou `Alt`.
 
 ### ⌨️ Les raccourcis i3 à connaître
@@ -79,20 +90,17 @@ la **touche Mod** : `Win` (recommandé) ou `Alt`.
 
 Il installe zsh, oh-my-zsh, fzf, les autosuggestions, tmux, vim, git et ccze.
 
-> ⚠️ **À exécuter en tant qu'utilisateur normal, PAS en root** — il écrit dans `~/.zshrc`,
+> ⚠️ **À exécuter en tant qu'utilisateur `vagrant`, PAS en root** — il écrit dans `~/.zshrc`,
 > `~/.fzf` et `~/.oh-my-zsh`. Lancé en root, vous configurerez le shell de root.
 
 ```bash
-cd ~/FormationLinux-niveau2/TP6-TerminalX11/
+cd /vagrant/FormationLinux-lvl2/TP7-TerminalX11/
 less crazy-shell.sh          # 💡 on lit toujours un script avant de l'exécuter
 bash crazy-shell.sh
 ```
 
-> 🐛 **Ce script a deux défauts.** À vous de les corriger :
-> 1. Il appelle `google-chrome`, qui n'est **pas installé** → `command not found`. Ouvrez plutôt
->    <https://github.com/ohmyzsh/ohmyzsh/wiki/Themes> depuis votre navigateur habituel.
-> 2. Il lance `zsh` **avant** `chsh`. Comme `zsh` ouvre un shell interactif, le `chsh` n'est
->    exécuté qu'après avoir tapé `exit`. Inversez les deux lignes.
+Le script finit dans zsh, qui est aussi devenu le shell de connexion (`sudo chsh`, sans mot
+de passe). ✅ Vérification, dans une nouvelle connexion : `echo $SHELL` → `/usr/bin/zsh`.
 
 ### Installation manuelle équivalente
 
@@ -123,7 +131,7 @@ source /usr/share/doc/fzf/examples/completion.zsh
 
 ```bash
 # Faire de zsh le shell par défaut (prend effet à la prochaine connexion)
-chsh -s "$(which zsh)"
+sudo chsh -s "$(which zsh)" "$USER"
 
 # ✅ Vérification
 echo $SHELL
@@ -267,6 +275,7 @@ deux panneaux, et éditer un fichier dans vim.
 | Problème | Solution |
 |---|---|
 | Écran noir après `reboot` | `systemctl status lightdm`, `journalctl -b -u lightdm` ; en secours `Ctrl+Alt+F2` pour une console texte |
+| Fenêtre VirtualBox petite, pas de plein écran | VRAM trop faible : `VBoxManage modifyvm box01 --vram 128` (VM éteinte), puis `Host+G` |
 | `chsh` sans effet | Le changement s'applique **à la prochaine connexion**. Vérifier avec `grep "^$USER" /etc/passwd` |
 | Caractères bizarres dans le thème zsh | Le thème `agnoster` exige une *Nerd Font*. Installer `fonts-powerline` ou changer de thème |
 | tmux : couleurs cassées | `export TERM=xterm-256color` dans `~/.zshrc` |

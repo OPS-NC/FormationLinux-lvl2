@@ -1,0 +1,16 @@
+# TP8 — VM Rocky Linux 10, sur le réseau du lab (192.168.56.0/24)
+Vagrant.configure("2") do |config|
+  config.vm.box              = "bento/rockylinux-10"
+  config.vm.box_check_update = false
+  config.vm.hostname         = "rocky"
+  config.vm.network "private_network", ip: "192.168.56.40"
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.name   = "rocky"
+    vb.cpus   = 2
+    vb.memory = 2048
+    # Évite des blocages au démarrage (rcu stall) constatés avec VirtualBox 7.2
+    vb.customize ["modifyvm", :id, "--paravirt-provider", "none"]
+  end
+end

@@ -2,12 +2,11 @@
 
 ## 🎯 Objectif
 
-Piloter **deux serveurs Debian 13** depuis un poste de contrôle, sans jamais s'y connecter en SSH.
+Piloter **deux serveurs Debian 13** depuis un serveur de contrôle, sans jamais s'y connecter en SSH.
 
 ```
                   ┌──────────────────────────────────────────┐
-                  │  Poste de travail — Ubuntu 26.04         │
-                  │  192.168.56.1                            │
+                  │  box01 — 192.168.56.10 — Debian 13       │
                   │  salt-master   (ports 4505 / 4506)       │
                   │  /srv/salt/    ← les states (le code)    │
                   └──────────────┬───────────────────────────┘
@@ -15,8 +14,8 @@ Piloter **deux serveurs Debian 13** depuis un poste de contrôle, sans jamais s'
                  ┌───────────────┴────────────────┐
                  ▼                                ▼
         ┌──────────────────┐            ┌──────────────────┐
-        │ box01            │            │ box02            │
-        │ 192.168.56.10    │            │ 192.168.56.20    │
+        │ box02            │            │ box03            │
+        │ 192.168.56.20    │            │ 192.168.56.30    │
         │ Debian 13        │            │ Debian 13        │
         │ salt-minion      │            │ salt-minion      │
         │ grain role:      │            │                  │
@@ -42,52 +41,33 @@ appliquer dix fois le même state donne le même résultat qu'une seule fois.
 
 ## 📋 Prérequis
 
-| Rôle | Machine | IP | OS |
-|---|---|---|---|
-| Master | Votre poste | `192.168.56.1` | Ubuntu 26.04 |
-| Minion | `box01` | `192.168.56.10` | Debian 13 |
-| Minion | `box02` | `192.168.56.20` | Debian 13 |
+| Rôle | Machine | IP |
+|---|---|---|
+| Master | `box01` | `192.168.56.10` |
+| Minion | `box02` | `192.168.56.20` |
+| Minion | `box03` | `192.168.56.30` |
 
-Le réseau `192.168.56.0/24` est le **host-only** par défaut de VirtualBox : votre poste y
-possède l'adresse `.1`, ce qui en fait un master naturellement joignable par les VM.
-
-### Les deux VM avec Vagrant
-
-```ruby
-# Vagrantfile
-Vagrant.configure("2") do |config|
-  config.vm.box = "debian/trixie64"
-
-  { "box01" => "192.168.56.10", "box02" => "192.168.56.20" }.each do |name, ip|
-    config.vm.define name do |node|
-      node.vm.hostname = name
-      node.vm.network "private_network", ip: ip
-      node.vm.provider "virtualbox" do |vb|
-        vb.memory = 1024
-        vb.cpus   = 1
-      end
-    end
-  end
-end
-```
+Depuis le dossier `VagrantLab` ([LAB.md](../LAB.md)) :
 
 ```bash
-vagrant up
+vagrant up box01 box02 box03
 vagrant status
 ```
 
-✅ Contrôle depuis votre poste — les deux VM doivent répondre :
+> 💡 `box02` porte encore le RAID du TP2 : on la garde, ce TP ne touche pas au stockage.
+
+Ouvrez trois terminaux : `vagrant ssh box01`, `vagrant ssh box02`, `vagrant ssh box03`,
+puis `sudo -i` dans chacun. Tout le TP se joue en **root**.
+
+✅ Depuis `box01`, les deux minions doivent répondre :
 
 ```bash
-ping -c1 192.168.56.10 && ping -c1 192.168.56.20
+ping -c1 box02 && ping -c1 box03
 ```
-
-> 💡 Pour entrer dans une VM : `vagrant ssh box01`. Pour passer root une fois dedans :
-> `sudo -i`. Tout le TP se joue en **root**, des deux côtés.
 
 ---
 
-# 1️⃣ Le master (Ubuntu 26.04)
+# 1️⃣ Le master (box01)
 
 ## 1.1 — Ajouter le dépôt officiel Salt
 
@@ -119,7 +99,8 @@ Pin-Priority: 1001
 EOF
 ```
 
-> ⚠️ Adaptez `3007.*` à la version majeure que vous installez (`apt-cache policy salt-master`).
+> 💡 `3007` est la branche **LTS** (le dépôt propose aussi `3008`). Master et minions doivent
+> être épinglés sur la même branche : un minion plus récent que son master n'est pas supporté.
 
 ## 1.2 — Installer et configurer
 
@@ -134,7 +115,7 @@ dans `/etc/salt/master.d/`, ce qui survit aux mises à jour du paquet.
 mkdir -p /srv/salt
 
 cat > /etc/salt/master.d/tp.conf <<'EOF'
-interface: 192.168.56.1
+interface: 192.168.56.10
 
 file_roots:
   base:
@@ -147,7 +128,7 @@ systemctl status salt-master --no-pager
 
 | Directive | Rôle |
 |---|---|
-| `interface` | Adresse d'écoute. Ici on **n'expose pas** le master sur le réseau public |
+| `interface` | Adresse d'écoute : le réseau du lab uniquement, pas l'interface NAT |
 | `file_roots` | Où le master va chercher les states de l'environnement `base` |
 
 ✅ Les deux ports doivent être ouverts :
@@ -165,17 +146,11 @@ ss -tlnp | grep -E '4505|4506'
 > eux qui se connectent et restent à l'écoute. Un minion derrière un NAT fonctionne donc
 > sans aucun port ouvert de son côté — l'inverse exact de ce que fait Ansible en SSH.
 
-Si `ufw` est actif sur votre poste :
-
-```bash
-ufw allow from 192.168.56.0/24 to any port 4505,4506 proto tcp
-```
-
 ---
 
-# 2️⃣ Les minions (box01 et box02)
+# 2️⃣ Les minions (box02 et box03)
 
-**À faire sur `box01` puis sur `box02`**, en root (`vagrant ssh box01` → `sudo -i`).
+**À faire sur `box02` puis sur `box03`**, en root.
 
 ```bash
 apt update && apt install -y curl
@@ -187,6 +162,14 @@ curl -fsSL https://github.com/saltstack/salt-install-guide/releases/latest/downl
   -o /etc/apt/sources.list.d/salt.sources
 
 apt update
+
+# Même épinglage que sur le master
+cat > /etc/apt/preferences.d/salt-pin-1001 <<'EOF'
+Package: salt-*
+Pin: version 3007.*
+Pin-Priority: 1001
+EOF
+
 apt install -y salt-minion
 ```
 
@@ -194,14 +177,14 @@ Pointer le minion vers le master, et lui donner un **identifiant stable** :
 
 ```bash
 cat > /etc/salt/minion.d/master.conf <<'EOF'
-master: 192.168.56.1
-id: box01
+master: 192.168.56.10
+id: box02
 EOF
 
 systemctl restart salt-minion
 ```
 
-> ⚠️ Sur `box02`, mettez bien `id: box02`. Sans directive `id`, Salt utilise le nom d'hôte
+> ⚠️ Sur `box03`, mettez bien `id: box03`. Sans directive `id`, Salt utilise le nom d'hôte
 > — ce qui marcherait ici, mais un ID explicite évite qu'un renommage de la machine crée un
 > **nouveau** minion (et une nouvelle clé à accepter).
 
@@ -209,7 +192,8 @@ systemctl restart salt-minion
 
 ```bash
 journalctl -u salt-minion -n 20 --no-pager
-# On cherche : « Minion is starting as user 'root' » puis l'attente d'acceptation de clé
+# Normal à ce stade : « The Salt Master has cached the public key for this node » —
+# le minion attend que sa clé soit acceptée
 ```
 
 ---
@@ -229,28 +213,28 @@ salt-key -L
 Accepted Keys:
 Denied Keys:
 Unaccepted Keys:
-box01
 box02
+box03
 Rejected Keys:
 ```
 
 Avant d'accepter, on **compare les empreintes** — c'est ce contrôle qui empêche une machine
-inconnue de se faire passer pour `box01` :
+inconnue de se faire passer pour `box02` :
 
 ```bash
 # Sur le master
-salt-key -f box01
+salt-key -f box02
 
-# Sur box01
+# Sur box02
 salt-call --local key.finger
 ```
 
 Les deux empreintes doivent être identiques. On accepte alors :
 
 ```bash
-salt-key -a box01        # une clé nommée
+salt-key -a box02        # une clé nommée
 salt-key -A -y           # ou toutes les clés en attente, sans confirmation
-salt-key -L              # ✅ box01 et box02 sont dans « Accepted Keys »
+salt-key -L              # ✅ box02 et box03 sont dans « Accepted Keys »
 ```
 
 ✅ Premier ordre distant :
@@ -260,9 +244,9 @@ salt '*' test.ping
 ```
 
 ```
-box01:
-    True
 box02:
+    True
+box03:
     True
 ```
 
@@ -271,7 +255,7 @@ Quelques commandes ponctuelles pour prendre en main la syntaxe `salt <cible> <fo
 ```bash
 salt '*' cmd.run 'uptime'
 salt '*' disk.usage
-salt 'box01' pkg.version bash
+salt 'box02' pkg.version bash
 ```
 
 > 💡 **`salt` vs `salt-call`.** `salt` s'exécute **sur le master** et cible des minions.
@@ -286,7 +270,7 @@ Un **grain** est un fait statique découvert au démarrage du minion : OS, versi
 mémoire, IP, virtualisation…
 
 ```bash
-salt 'box01' grains.items          # tout (long)
+salt 'box02' grains.items          # tout (long)
 salt '*' grains.item os osrelease osarch
 salt '*' grains.get ipv4
 salt '*' grains.get virtual        # -> VirtualBox
@@ -303,9 +287,9 @@ salt -G 'osmajorrelease:13' cmd.run 'hostname'
 |---|---|---|
 | *(aucune)* | Glob sur l'ID | `salt 'box*' test.ping` |
 | `-G` | Grain | `salt -G 'os:Debian' test.ping` |
-| `-E` | Expression régulière | `salt -E 'box0[12]' test.ping` |
-| `-L` | Liste explicite | `salt -L 'box01,box02' test.ping` |
-| `-C` | Composé (ET / OU) | `salt -C 'G@os:Debian and box01' test.ping` |
+| `-E` | Expression régulière | `salt -E 'box0[23]' test.ping` |
+| `-L` | Liste explicite | `salt -L 'box02,box03' test.ping` |
+| `-C` | Composé (ET / OU) | `salt -C 'G@os:Debian and box02' test.ping` |
 
 ---
 
@@ -379,7 +363,7 @@ outils-de-base:
       - rsync
       - tree
       - net-tools
-      - dnsutils
+      - bind9-dnsutils
       - unzip
       - ncdu
 
@@ -456,19 +440,19 @@ salt '*' state.apply
 ```
 
 ```
-box01:
+box02:
 ----------
           ID: outils-de-base
     Function: pkg.installed
       Result: True
-     Comment: 12 targeted packages were installed/updated.
+     Comment: The following packages were installed/updated: bind9-dnsutils, ncdu, …
      Changes:
               ----------
               git: ...
 ...
-Summary for box01
+Summary for box02
 ------------
-Succeeded: 4 (changed=3)
+Succeeded: 4 (changed=4)
 Failed:    0
 ```
 
@@ -484,25 +468,25 @@ rien à faire, donc rien de fait.
 ✅ Vérification finale, la vraie :
 
 ```bash
-ssh vagrant@192.168.56.10
+ssh vagrant@192.168.56.20          # depuis box01
 ```
 
 La bannière CORP.NC s'affiche **avant** la demande de mot de passe.
 
 ---
 
-# 6️⃣ Cibler `box01` par un grain — le rôle `webserver`
+# 6️⃣ Cibler `box02` par un grain — le rôle `webserver`
 
-Le socle est identique partout. On veut maintenant que **seule** `box01` soit un serveur
-web — sans jamais écrire `box01` dans le `top.sls`, pour que le jour où `box07` doit servir
+Le socle est identique partout. On veut maintenant que **seule** `box02` soit un serveur
+web — sans jamais écrire `box02` dans le `top.sls`, pour que le jour où `box07` doit servir
 du web, il suffise de lui poser le même grain.
 
-## 6.1 — Poser le grain sur box01
+## 6.1 — Poser le grain sur box02
 
 Les grains personnalisés se déclarent dans `/etc/salt/grains` (fichier YAML **sans** clé
 `grains:` en tête).
 
-**Sur `box01`, en root :**
+**Sur `box02`, en root :**
 
 ```bash
 cat > /etc/salt/grains <<'EOF'
@@ -520,16 +504,16 @@ salt '*' grains.get role
 ```
 
 ```
-box01:
-    webserver
 box02:
+    webserver
+box03:
 ```
 
 ```bash
-salt -G 'role:webserver' test.ping     # ✅ box01 uniquement
+salt -G 'role:webserver' test.ping     # ✅ box02 uniquement
 ```
 
-> 💡 **Alternative depuis le master** : `salt box01 grains.setval role webserver`.
+> 💡 **Alternative depuis le master** : `salt box02 grains.setval role webserver`.
 > Pratique, mais le fichier `/etc/salt/grains` reste préférable — il est versionnable et
 > visible à l'inspection de la VM. Attention aussi : les grains sont fournis par le
 > **minion**, donc par une machine potentiellement compromise. Pour une donnée sensible
@@ -618,7 +602,7 @@ EOF
 ## 6.4 — Appliquer et vérifier
 
 ```bash
-salt '*' state.apply test=True     # ✅ box02 : aucun changement, box01 : nginx à installer
+salt '*' state.apply test=True     # ✅ box03 : aucun changement, box02 : nginx à installer
 salt '*' state.apply
 ```
 
@@ -629,14 +613,14 @@ salt '*' state.apply
 salt -G 'role:webserver' state.apply
 
 # Depuis le master
-curl http://192.168.56.10          # -> Welcome to box01
-curl http://192.168.56.20          # -> Connection refused : box02 n'est pas un serveur web
+curl http://192.168.56.20          # -> Welcome to box02
+curl http://192.168.56.30          # -> Connection refused : box03 n'est pas un serveur web
 
-salt 'box01' service.status nginx  # -> True
+salt 'box02' service.status nginx  # -> True
 ```
 
-🏋️ **À vous.** Posez le grain `role: webserver` sur `box02`, relancez `salt 'box02'
-state.apply`, et constatez que la page annonce `Welcome to box02` — sans avoir modifié une
+🏋️ **À vous.** Posez le grain `role: webserver` sur `box03`, relancez `salt 'box03'
+state.apply`, et constatez que la page annonce `Welcome to box03` — sans avoir modifié une
 seule ligne de state.
 
 ---
@@ -665,7 +649,7 @@ seule ligne de state.
 |---|---|---|
 | `Minion did not return. [No response]` | Minion arrêté, ou clé acceptée après son dernier démarrage | `systemctl restart salt-minion` sur la VM |
 | Le minion n'apparaît pas dans `salt-key -L` | Master injoignable sur 4505/4506 | `ss -tlnp \| grep 450` sur le master ; pare-feu ; `interface:` mal réglé |
-| `The Salt Master has cached the public key for this node` | ID réutilisé avec une nouvelle clé (VM recréée) | `salt-key -d box01` sur le master, puis `rm -f /etc/salt/pki/minion/minion_master.pub` sur le minion et redémarrer |
+| `The Salt Master has cached the public key for this node` **après** acceptation | ID réutilisé avec une nouvelle clé (VM recréée) | `salt-key -d box02` sur le master, puis `rm -f /etc/salt/pki/minion/minion_master.pub` sur le minion et redémarrer |
 | `No Top file or master_tops data matches found` | `top.sls` absent, ou hors `file_roots` | Vérifier `/srv/salt/top.sls` et la conf `file_roots` |
 | `Rendering SLS failed` | Erreur d'indentation YAML | Les tabulations sont interdites — 2 espaces ; `salt '*' state.show_sls <nom>` |
 | Le grain `role` reste vide | `/etc/salt/grains` mal formé ou minion non relancé | Pas de clé `grains:` en tête ; `systemctl restart salt-minion` |

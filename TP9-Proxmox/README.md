@@ -1,4 +1,4 @@
-# 🧱 TP7 — Proxmox : image cloud Debian 13, template & clones cloud-init
+# 🧱 TP9 — Proxmox : image cloud Debian 13, template & clones cloud-init
 
 ## 🎯 Objectif
 
@@ -410,7 +410,7 @@ qm clone "$TPL_ID" 201 \
   --name web01 \
   --full \
   --storage "$STORAGE" \
-  --description "Serveur web — TP7"
+  --description "Serveur web — TP9"
 
 # Ce qui est propre à CETTE VM
 qm set 201 \
@@ -550,7 +550,7 @@ Tout ce que vous venez de faire à la main tient dans un script fourni :
 [`build-template.sh`](build-template.sh).
 
 ```bash
-# Lire AVANT d'exécuter en root (réflexe du TP5)
+# Lire AVANT d'exécuter en root (réflexe du TP6)
 less build-template.sh
 
 ./build-template.sh --help
@@ -583,7 +583,7 @@ connexion SSH.
 
 > 💡 Cette partie suppose un `salt-master` déjà en place, joignable depuis le réseau des VM.
 > Sa mise en œuvre et les states utilisés ici sont couverts par le TP
-> [**Saltstack**](../TP3-Installation/Saltstack.md).
+> [**Saltstack**](../TP4-Installation/Saltstack.md).
 
 ## 7.1 — Dans l'image ou dans le `user-data` ?
 

@@ -1,6 +1,6 @@
 #cloud-config
 # =============================================================================
-# TP7 — Exemple de user-data cloud-init complet
+# TP9 — Exemple de user-data cloud-init complet
 # =============================================================================
 #
 # Installation :
@@ -83,7 +83,7 @@ write_files:
     content: |
       <!doctype html>
       <html lang="fr">
-        <head><meta charset="utf-8"><title>TP7 Proxmox</title></head>
+        <head><meta charset="utf-8"><title>TP9 Proxmox</title></head>
         <body>
           <h1>Déployée par cloud-init 🎉</h1>
           <p>Hôte : <code>__HOSTNAME__</code></p>
@@ -105,7 +105,7 @@ write_files:
   - path: /etc/tp7-deploiement
     permissions: '0444'
     content: |
-      Déployée depuis le template Proxmox debian13-cloud (TP7).
+      Déployée depuis le template Proxmox debian13-cloud (TP9).
       Toute modification manuelle sera perdue au prochain redéploiement.
 
 # --- Commandes de premier boot ---------------------------------------------

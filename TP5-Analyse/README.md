@@ -1,4 +1,4 @@
-# 🔎 TP4 — Analyse et diagnostic de panne
+# 🔎 TP5 — Analyse et diagnostic de panne
 
 ## 🎯 Objectif
 
@@ -6,7 +6,7 @@ Un script va **casser volontairement** votre serveur de plusieurs façons diffé
 À vous de le réparer, **sans lire le script**, en appliquant une méthode de diagnostic.
 
 > 🏁 **Critère de réussite :** depuis **votre poste** (pas depuis le serveur),
-> `curl http://IP_DU_SERVEUR/` doit renvoyer :
+> `curl http://192.168.56.10/` doit renvoyer :
 >
 > ```
 > Mon application de Formation.
@@ -18,20 +18,20 @@ Un script va **casser volontairement** votre serveur de plusieurs façons diffé
 
 ## 📋 Prérequis
 
-- Debian 13 **sain** (jouez ce TP avant de bricoler le système)
-- ⚠️ **Snapshot obligatoire** de la VM — c'est votre seule voie de retour
-- L'IP du serveur joignable depuis votre poste, et un accès SSH **déjà ouvert et testé**
+- VM `box01` **neuve** (`vagrant destroy -f box01 && vagrant up box01`)
+- ⚠️ **Snapshot obligatoire** : `vagrant snapshot save box01 tp5` — votre seule voie de retour
+- Depuis le poste, `curl http://192.168.56.10/` doit répondre « Connection refused » (rien n'écoute encore)
 
-⚠️ **Testez votre accès SSH avant de lancer le script.** Il manipule le pare-feu. Si vous êtes
-enfermé dehors, il vous faudra la console de la VM (hyperviseur) pour reprendre la main.
+⚠️ Le script manipule le pare-feu. Si `vagrant ssh` ne répond plus, la console VirtualBox
+(**Afficher**, login `vagrant` / `vagrant`) permet de reprendre la main.
 
 ---
 
 ## 🚀 Lancer la panne
 
 ```bash
-cd ~/FormationLinux-niveau2/TP4-Analyse/
-sudo bash install.sh
+cd /vagrant/FormationLinux-lvl2/TP5-Analyse/
+bash install.sh
 ```
 
 Le script installe et configure plusieurs services, puis introduit **cinq problèmes distincts**
@@ -82,7 +82,7 @@ en validant chaque niveau avant de passer au suivant.
 ```bash
 ip -br a                       # Interfaces et adresses IP (vue compacte)
 ip route                       # Passerelle par défaut
-ping -c3 IP_DU_SERVEUR         # Depuis votre poste
+ping -c3 192.168.56.10         # Depuis votre poste
 ```
 
 ### ❷ Pare-feu
@@ -165,7 +165,7 @@ curl -I localhost                    # En-têtes seuls
 
 Progressez de l'extérieur vers l'intérieur, et **notez vos constats** :
 
-1. Depuis votre poste : `curl -v http://IP/` → timeout ? refus ? code HTTP ? La nature de
+1. Depuis votre poste : `curl -v http://192.168.56.10/` → timeout ? refus ? code HTTP ? La nature de
    l'échec vous dit déjà à quelle couche chercher.
 2. Sur le serveur : `curl -v localhost` → même résultat ou différent ? **Si ça marche en local
    mais pas à distance, le problème est réseau/pare-feu.**
@@ -190,10 +190,10 @@ uptime                          # load average revenu proche de 0
 systemctl is-enabled nginx      # enabled
 
 # ⚠️ Le vrai test : depuis VOTRE POSTE
-curl http://IP_DU_SERVEUR/      # -> Mon application de Formation.
+curl http://192.168.56.10/      # -> Mon application de Formation.
 
 # Et le test de résistance : après un redémarrage, ça marche toujours ?
-sudo reboot
+vagrant reload box01            # depuis le poste, puis on refait le curl
 ```
 
 ---
@@ -253,7 +253,7 @@ sudo systemctl enable nginx
 
 | Problème | Solution |
 |---|---|
-| Enfermé dehors, SSH ne répond plus | Console de la VM via l'hyperviseur, puis `ufw allow ssh` |
+| Enfermé dehors, SSH ne répond plus | Console VirtualBox (**Afficher**, `vagrant` / `vagrant`), puis `sudo ufw allow ssh` |
 | Machine inutilisable tant le CPU est chargé | `pkill -x yes`, ou `renice 19 -p PID` |
 | `nginx: [emerg]` au rechargement | `nginx -t` donne le fichier et la ligne exacte |
-| Impossible de revenir en arrière | Restaurer le snapshot pris avant le TP |
+| Impossible de revenir en arrière | `vagrant snapshot restore box01 tp5` |

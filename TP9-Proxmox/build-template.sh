@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# TP7 — Construction automatisée d'un template Proxmox « Debian 13 cloud »
+# TP9 — Construction automatisée d'un template Proxmox « Debian 13 cloud »
 #
 # Rejoue les parties 1 à 4 du TP :
 #   téléchargement + vérification de l'image cloud officielle
@@ -215,7 +215,7 @@ qm create "$VMID" \
     --agent enabled=1,fstrim_cloned_disks=1 \
     --tablet 0 \
     --onboot 1 \
-    --description "Template Debian 13 cloud-init — généré par TP7/build-template.sh"
+    --description "Template Debian 13 cloud-init — généré par TP9/build-template.sh"
 
 info "Import du disque vers $STORAGE"
 qm set "$VMID" --scsi0 "$STORAGE:0,import-from=$SRC_IMG,discard=on,ssd=1,iothread=1" >/dev/null

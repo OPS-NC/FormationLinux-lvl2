@@ -1,4 +1,4 @@
-# 💾 TP1 — Systèmes de fichiers : RAID, LVM & BTRFS
+# 💾 TP2 — Systèmes de fichiers : RAID, LVM & BTRFS
 
 ## 🎯 Objectif
 
@@ -20,9 +20,9 @@ snapshots sans repartitionner). Les deux sont complémentaires, pas concurrents.
 
 ## 📋 Prérequis
 
-- Debian 13 avec **deux disques vierges supplémentaires** (`/dev/sdb` et `/dev/sdc`, 2 Go suffisent)
-- Session **root**
-- ⚠️ Un snapshot de la VM : ce TP détruit le contenu de `sdb` et `sdc`
+- VM **`box02`** avec **deux disques vierges de 2 Go** ajoutés dans VirtualBox → [LAB.md](../LAB.md#-disques-du-tp2)
+- Session **root** : `vagrant ssh box02` puis `sudo -i`
+- ⚠️ `box02` est **conservée** pour le TP6 (sauvegardes sur ce volume) : ne la détruisez pas
 
 ```bash
 apt update && apt install -y mdadm lvm2 btrfs-progs
@@ -103,7 +103,8 @@ lsblk -o NAME,SIZE,FSTYPE,TYPE
 mdadm --create /dev/md0 --level=mirror --raid-devices=2 /dev/sdb1 /dev/sdc1
 ```
 
-> `mdadm` demande confirmation (`Continue creating array?`) → répondre `y`.
+> `mdadm` pose deux questions : activer le *write-intent bitmap* (`y`, accélère la
+> reconstruction) puis `Continue creating array?` → `y`.
 
 ```bash
 # Suivre la resynchronisation initiale (les deux disques se recopient)
@@ -183,12 +184,13 @@ mkdir -p /mnt/lvbtrfs
 Ajoutez la ligne suivante à `/etc/fstab` :
 
 ```fstab
-/dev/deb/lvbtrfs   /mnt/lvbtrfs   btrfs   defaults,noatime   0   0
+/dev/deb/lvbtrfs   /mnt/lvbtrfs   btrfs   defaults,noatime,nofail   0   0
 ```
 
 | Champ | Valeur | Pourquoi |
 |---|---|---|
 | Options | `noatime` | N'écrit pas la date d'accès à chaque lecture → moins d'I/O |
+| | `nofail` | Volume absent au boot → on démarre quand même (sinon mode d'urgence, inaccessible ici : root est verrouillé sur les box Vagrant) |
 | Dump | `0` | Inutilisé aujourd'hui |
 | Pass (fsck) | **`0`** | ⚠️ BTRFS n'a **pas** de `fsck` au boot : mettre `2` génère une erreur au démarrage |
 
@@ -197,7 +199,8 @@ Ajoutez la ligne suivante à `/etc/fstab` :
 > et `autodefrag` est contre-productif sur SSD. Sur une VM, `defaults,noatime` est le bon choix.
 
 ```bash
-# Monter tout ce qui est déclaré dans fstab
+# systemd garde une copie de fstab : on la recharge, puis on monte
+systemctl daemon-reload
 mount -a
 
 # ✅ Vérifications
@@ -212,7 +215,7 @@ le système de démarrer. Si `mount -a` passe sans erreur, le boot passera aussi
 
 ```bash
 # On écrit un fichier témoin pour la suite du TP
-echo "Fichier temoin TP1" > /mnt/lvbtrfs/temoin.txt
+echo "Fichier temoin TP2" > /mnt/lvbtrfs/temoin.txt
 cat /mnt/lvbtrfs/temoin.txt
 ```
 
@@ -239,7 +242,7 @@ mdadm --detail /dev/md0   # State : clean, degraded
 toujours lisible et la partition toujours montée.
 
 ```bash
-cat /mnt/lvbtrfs/temoin.txt     # -> "Fichier temoin TP1"
+cat /mnt/lvbtrfs/temoin.txt     # -> "Fichier temoin TP2"
 df -h /mnt/lvbtrfs              # -> toujours monté
 ```
 
@@ -260,8 +263,7 @@ mdadm --manage /dev/md0 --remove /dev/sdc1
 cat /proc/mdstat
 
 # 2. (Dans la vraie vie) on débranche le disque mort et on en branche un neuf.
-#    En VM : supprimez le disque sdc dans les paramètres, ajoutez-en un vierge.
-#    Pour ce TP on réutilise simplement sdc, désormais vide.
+#    Ici on réutilise simplement sdc, dont le début a été effacé.
 
 # 3. On recopie la table de partition du disque sain vers le neuf
 sfdisk -d /dev/sdb | sfdisk --force /dev/sdc
@@ -282,8 +284,9 @@ mdadm --detail /dev/md0
 cat /mnt/lvbtrfs/temoin.txt     # les données n'ont jamais bougé
 ```
 
-> 💡 Pensez à mettre à jour `/etc/mdadm/mdadm.conf` si l'UUID de la grappe a changé,
-> puis `update-initramfs -u`.
+💡 L'UUID de la grappe ne change pas : `mdadm.conf` reste valable. Vérifiez la persistance
+avec un redémarrage : depuis le poste, `vagrant reload box02`, puis `cat /proc/mdstat` et
+`df -h /mnt/lvbtrfs`.
 
 ---
 
@@ -315,10 +318,11 @@ cat /mnt/lvbtrfs/temoin.txt     # les données n'ont jamais bougé
 | `mdadm: Device or resource busy` | Le disque est déjà utilisé (montage, autre grappe) | `umount`, puis `mdadm --zero-superblock /dev/sdX1` |
 | La grappe devient `/dev/md127` au reboot | `mdadm.conf` non renseigné | Refaire l'étape « persistance » puis `update-initramfs -u` |
 | `mount -a` : `unknown filesystem type 'btrfs'` | `btrfs-progs` absent | `apt install btrfs-progs` |
-| Boot bloqué en mode maintenance | Ligne `fstab` fautive | Se connecter en root, corriger `/etc/fstab`, `mount -a` pour valider |
+| `sdb` / `sdc` absents de `lsblk` | Disques non ajoutés, ou ajoutés VM démarrée | VM éteinte, contrôleur **SATA**, puis `vagrant up box02` |
+| Boot bloqué en mode maintenance (`root account is locked`) | Ligne `fstab` fautive sans `nofail` | `vagrant snapshot restore`, ou GRUB : `e`, ajouter `init=/bin/bash` et corriger `/etc/fstab` |
 | `lvcreate: Volume group "deb" not found` | Le PV n'a pas été créé sur `/dev/md0` | Reprendre à l'étape 4 |
 
-## 🧹 Remise à zéro
+## 🧹 Remise à zéro (après le TP6)
 
 ```bash
 umount /mnt/lvbtrfs

@@ -6,7 +6,7 @@
 #   comptes  : alice (admin), bob (developer)
 #   sudo     : %admin  -> privilèges complets
 #              %developer -> systemctl / journalctl restreints (liste blanche)
-#   partage  : /opt/appli-dev  root:developer  2775 + setgid + ACL
+#   partage  : /opt/appli-dev  root:developer  2770 (setgid)
 #
 # À exécuter EN ROOT sur la VM de TP.
 #
@@ -24,7 +24,6 @@ set -euo pipefail
 SHARE_DIR=/opt/appli-dev
 SUDOERS_ADMIN=/etc/sudoers.d/10-admin
 SUDOERS_DEV=/etc/sudoers.d/20-developer
-UMASK_PROFILE=/etc/profile.d/umask-developer.sh
 
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 ok()   { printf '\033[1;32m  ✓\033[0m %s\n' "$*"; }
@@ -94,16 +93,17 @@ do_check() {
     info "Répertoire partagé"
     if [[ -d $SHARE_DIR ]]; then
         ok "$(stat -c '%n  %U:%G  %A  (%a)' "$SHARE_DIR")"
-        [[ $(stat -c '%a' "$SHARE_DIR") == 2775 ]] && ok "  setgid actif (2775)" \
-            || { nok "  droits $(stat -c '%a' "$SHARE_DIR") au lieu de 2775"; rc=1; }
-        command -v getfacl >/dev/null && getfacl -p "$SHARE_DIR" 2>/dev/null | sed 's/^/    /'
+        [[ $(stat -c '%a' "$SHARE_DIR") == 2770 ]] && ok "  setgid actif (2770)" \
+            || { nok "  droits $(stat -c '%a' "$SHARE_DIR") au lieu de 2770"; rc=1; }
     else
         nok "$SHARE_DIR absent"; rc=1
     fi
 
     info "umask"
-    [[ -f $UMASK_PROFILE ]] && ok "$UMASK_PROFILE présent" || { nok "$UMASK_PROFILE absent"; rc=1; }
-    id bob >/dev/null 2>&1 && printf '  umask de bob : %s\n' "$(su - bob -c 'umask')"
+    if id bob >/dev/null 2>&1; then
+        m=$(su - bob -c 'umask')
+        [[ $m == 0002 ]] && ok "umask de bob : $m" || { nok "umask de bob : $m au lieu de 0002"; rc=1; }
+    fi
 
     echo
     [[ $rc -eq 0 ]] && ok "Tout est conforme." || nok "Des écarts subsistent (voir ci-dessus)."
@@ -119,7 +119,7 @@ do_cleanup() {
     [[ $rep == oui ]] || die "Annulé."
 
     info "Règles sudo"
-    rm -f "$SUDOERS_ADMIN" "$SUDOERS_DEV" "$UMASK_PROFILE"
+    rm -f "$SUDOERS_ADMIN" "$SUDOERS_DEV"
     visudo -c >/dev/null && ok "sudoers toujours valide après suppression"
 
     info "Comptes"
@@ -153,10 +153,8 @@ do_cleanup() {
 do_setup() {
     # --- Paquets ----------------------------------------------------------- #
     info "Paquets requis"
-    for p in sudo acl; do
-        dpkg -s "$p" >/dev/null 2>&1 || { apt-get install -y "$p"; }
-    done
-    ok "sudo et acl présents"
+    dpkg -s sudo >/dev/null 2>&1 || apt-get install -y sudo
+    ok "sudo présent"
 
     # --- Groupes ----------------------------------------------------------- #
     info "Groupes admin et developer"
@@ -179,13 +177,7 @@ do_setup() {
     usermod -aG admin alice
     usermod -aG developer bob
 
-    # ⚠️ useradd calcule le mode du $HOME avec HOME_MODE (login.defs) et, à défaut,
-    #    avec 0777 & ~UMASK -> 0755 sur Debian, soit un home lisible par tout le monde.
-    #    adduser, lui, applique DIR_MODE=0700 de adduser.conf. D'où cette correction.
-    if ! grep -qE '^HOME_MODE' /etc/login.defs; then
-        echo 'HOME_MODE 0700' >> /etc/login.defs
-        warn "HOME_MODE 0700 ajouté à /etc/login.defs (absent par défaut sous Debian)"
-    fi
+    # useradd applique HOME_MODE de login.defs (0700 sur Debian 13).
     chmod 700 /home/alice /home/bob
     ok "homes en $(stat -c '%a' /home/bob)"
 
@@ -276,9 +268,7 @@ EOF
     chown -R root:developer "$SHARE_DIR"
 
     # 2775 : setgid (2) -> tout ce qui est créé hérite du groupe developer
-    chmod 2775 "$SHARE_DIR"
     find "$SHARE_DIR" -type d -exec chmod 2775 {} +
-    ok "$(stat -c '%n  %U:%G  %A' "$SHARE_DIR")"
 
     # Dépôt commun : setgid + sticky -> chacun ne supprime que ses fichiers
     mkdir -p "$SHARE_DIR/depot"
@@ -286,28 +276,9 @@ EOF
     chmod 3775 "$SHARE_DIR/depot"
     ok "$(stat -c '%n  %U:%G  %A' "$SHARE_DIR/depot")"
 
-    # --- ACL : deux groupes sur un même arbre ------------------------------ #
-    # Impossible avec ugo seul : un fichier n'a qu'UN groupe propriétaire.
-    info "ACL POSIX (developer en écriture, admin en lecture)"
-    setfacl -R -m    g:developer:rwX -m    g:admin:rX "$SHARE_DIR"
-    setfacl -R -d -m g:developer:rwX -d -m g:admin:rX "$SHARE_DIR"
-    ok "ACL et ACL par défaut posées"
-
-    # --- umask ------------------------------------------------------------- #
-    # setgid donne le bon GROUPE ; le umask donne le bon DROIT D'ÉCRITURE.
-    # Il faut les deux : avec 022, les fichiers naissent en 644 (groupe en
-    # lecture seule) et la collaboration est impossible.
-    info "umask 002 pour le groupe developer"
-    cat > "$UMASK_PROFILE" <<'EOF'
-# Écriture collaborative pour les membres du groupe developer.
-# Sûr grâce au schéma UPG : le groupe principal de chaque utilisateur ne
-# contient que lui-même, un umask 002 n'expose donc rien à des tiers.
-if id -nG | tr ' ' '\n' | grep -qx developer; then
-    umask 002
-fi
-EOF
-    chmod 644 "$UMASK_PROFILE"
-    ok "$UMASK_PROFILE"
+    # Personne d'autre n'entre : 2770 sur la racine
+    chmod 2770 "$SHARE_DIR"
+    ok "$(stat -c '%n  %U:%G  %A' "$SHARE_DIR")"
 
     # --- Récapitulatif ----------------------------------------------------- #
     echo

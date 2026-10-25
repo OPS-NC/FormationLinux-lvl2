@@ -17,7 +17,24 @@ Documentation, tutoriels et aide-mémoire pour accompagner les TP.
 
 ---
 
-## 💾 TP1 — Stockage
+## 👥 TP1 — Utilisateurs, groupes, `sudo` et permissions
+
+| Ressource | Lien |
+|---|---|
+| `man 5 sudoers` — la référence, à lire une fois en entier | <https://www.sudo.ws/docs/man/sudoers.man/> |
+| Sudo — bonnes pratiques et pièges de sécurité | <https://www.sudo.ws/docs/man/sudo.man/#SECURITY_NOTES> |
+| GTFOBins — comment s'échapper d'un `sudo` mal configuré ⚠️ | <https://gtfobins.github.io/> |
+| `man 5 passwd` / `man 5 shadow` | <https://manpages.debian.org/stable/manpages/shadow.5.en.html> |
+| `man 5 login.defs` — plages d'UID, `UMASK`, `USERGROUPS_ENAB` | <https://manpages.debian.org/stable/passwd/login.defs.5.en.html> |
+| Wiki Debian — gestion des utilisateurs | <https://wiki.debian.org/UserManagement> |
+| Permissions Unix expliquées (setuid, setgid, sticky) | <https://www.redhat.com/sysadmin/suid-sgid-sticky-bit> |
+| Calculateur de `chmod` en octal | <https://chmod-calculator.com/> |
+| Norme FHS — que mettre dans `/opt`, `/srv`, `/usr/local` | <https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html> |
+| PAM — `pam_umask`, où se règle vraiment le `umask` | <https://manpages.debian.org/stable/libpam-modules/pam_umask.8.en.html> |
+
+---
+
+## 💾 TP2 — Stockage
 
 | Ressource | Lien |
 |---|---|
@@ -29,7 +46,7 @@ Documentation, tutoriels et aide-mémoire pour accompagner les TP.
 
 ---
 
-## 🧩 TP2 — Noyau
+## 🧩 TP3 — Noyau
 
 | Ressource | Lien |
 |---|---|
@@ -42,17 +59,19 @@ Documentation, tutoriels et aide-mémoire pour accompagner les TP.
 
 ---
 
-## 📦 TP3 — debootstrap & chroot
+## 📦 TP4 — debootstrap, chroot & SaltStack
 
 | Ressource | Lien |
 |---|---|
 | Wiki Debian — Debootstrap | <https://wiki.debian.org/Debootstrap> |
 | `man debootstrap` | <https://manpages.debian.org/stable/debootstrap/debootstrap.8.en.html> |
 | systemd-nspawn (le chroot moderne) | <https://www.freedesktop.org/software/systemd/man/systemd-nspawn.html> |
+| Salt — guide d'installation | <https://docs.saltproject.io/salt/install-guide/en/latest/> |
+| Salt — documentation des states | <https://docs.saltproject.io/en/latest/ref/states/all/index.html> |
 
 ---
 
-## 🔎 TP4 — Analyse & diagnostic
+## 🔎 TP5 — Analyse & diagnostic
 
 | Ressource | Lien |
 |---|---|
@@ -65,7 +84,7 @@ Documentation, tutoriels et aide-mémoire pour accompagner les TP.
 
 ---
 
-## 📊 TP5 — Supervision & sauvegarde
+## 📊 TP6 — Supervision & sauvegarde
 
 | Ressource | Lien |
 |---|---|
@@ -78,7 +97,7 @@ Documentation, tutoriels et aide-mémoire pour accompagner les TP.
 
 ---
 
-## 🖥️ TP6 — Terminal & environnement graphique
+## 🖥️ TP7 — Terminal & environnement graphique
 
 | Ressource | Lien |
 |---|---|
@@ -94,7 +113,19 @@ Documentation, tutoriels et aide-mémoire pour accompagner les TP.
 
 ---
 
-## 🧱 TP7 — Proxmox & cloud-init
+## 🎩 TP8 — Base Red Hat
+
+| Ressource | Lien |
+|---|---|
+| Documentation Rocky Linux | <https://docs.rockylinux.org/> |
+| RHEL 10 — gestion des paquets avec `dnf` | <https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/10/html/managing_software_with_the_dnf_tool/> |
+| RHEL 10 — utiliser SELinux | <https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/10/html/using_selinux/> |
+| Documentation firewalld | <https://firewalld.org/documentation/> |
+| EPEL | <https://docs.fedoraproject.org/en-US/epel/> |
+
+---
+
+## 🧱 TP9 — Proxmox & cloud-init
 
 | Ressource | Lien |
 |---|---|
@@ -111,25 +142,6 @@ Documentation, tutoriels et aide-mémoire pour accompagner les TP.
 | `virt-customize` (libguestfs) | <https://libguestfs.org/virt-customize.1.html> |
 | LVM-thin dans Proxmox | <https://pve.proxmox.com/wiki/Storage:_LVM_Thin> |
 | Réseau Proxmox (bridges, VLAN) | <https://pve.proxmox.com/wiki/Network_Configuration> |
-
----
-
-## 👥 TP-Users — Utilisateurs, groupes, `sudo` et permissions
-
-| Ressource | Lien |
-|---|---|
-| `man 5 sudoers` — la référence, à lire une fois en entier | <https://www.sudo.ws/docs/man/sudoers.man/> |
-| Sudo — bonnes pratiques et pièges de sécurité | <https://www.sudo.ws/docs/man/sudo.man/#SECURITY_NOTES> |
-| GTFOBins — comment s'échapper d'un `sudo` mal configuré ⚠️ | <https://gtfobins.github.io/> |
-| `man 5 passwd` / `man 5 shadow` | <https://manpages.debian.org/stable/manpages/shadow.5.en.html> |
-| `man 5 login.defs` — plages d'UID, `UMASK`, `USERGROUPS_ENAB` | <https://manpages.debian.org/stable/passwd/login.defs.5.en.html> |
-| Wiki Debian — gestion des utilisateurs | <https://wiki.debian.org/UserManagement> |
-| Permissions Unix expliquées (setuid, setgid, sticky) | <https://www.redhat.com/sysadmin/suid-sgid-sticky-bit> |
-| ACL POSIX — `man 5 acl` | <https://manpages.debian.org/stable/acl/acl.5.en.html> |
-| Tutoriel ACL (`setfacl` / `getfacl`) | <https://www.redhat.com/sysadmin/linux-access-control-lists> |
-| Calculateur de `chmod` en octal | <https://chmod-calculator.com/> |
-| Norme FHS — que mettre dans `/opt`, `/srv`, `/usr/local` | <https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html> |
-| PAM — `pam_umask`, où se règle vraiment le `umask` | <https://manpages.debian.org/stable/libpam-modules/pam_umask.8.en.html> |
 
 ---
 

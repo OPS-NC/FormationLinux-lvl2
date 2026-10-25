@@ -1,4 +1,4 @@
-# 📦 TP3 — Installation d'un système avec `debootstrap` & `chroot`
+# 📦 TP4 — Installation d'un système avec `debootstrap` & `chroot`
 
 ## 🎯 Objectif
 
@@ -15,9 +15,8 @@ d'un système sur un disque depuis un autre système.
 
 ## 📋 Prérequis
 
-- Debian 13, session **root**, ~1 Go d'espace libre
+- VM `box01` neuve, session **root** (`vagrant ssh box01` puis `sudo -i`)
 - Accès Internet vers un miroir Ubuntu
-- ⚠️ Le port **80** doit être libre (si vous avez déjà joué le TP4 : `systemctl stop nginx apache2`)
 
 ```bash
 apt update
@@ -144,17 +143,21 @@ EOF
 apt-get update
 apt-get install -y apache2
 
-# systemd n'est pas PID 1 ici : on démarre via le script SysV
-/etc/init.d/apache2 start
-/etc/init.d/apache2 status
+# Démarrage : voir l'encadré ci-dessous
+APACHE_STARTED_BY_SYSTEMD=true apache2ctl start
+pgrep -a apache2
 
 # On sort du chroot
 exit
 ```
 
-> 💡 **Pourquoi `/etc/init.d/apache2` et pas `systemctl` ?** Un chroot partage le PID 1 de l'hôte.
-> `systemctl` parlerait au systemd de **Debian**, qui ne connaît pas les services de l'invité.
-> Les scripts SysV, eux, sont de simples scripts shell qui lancent le binaire directement.
+> 💡 **Pourquoi pas `systemctl` ni `/etc/init.d/apache2` ?** Un chroot partage le PID 1 de
+> l'hôte (le systemd de **Debian**), qui ne connaît pas les services de l'invité. Les deux
+> commandes le détectent et refusent : `Running in chroot, ignoring command 'start'`.
+> `apache2ctl` fait pareil, sauf si on lui dit que systemd s'en charge déjà
+> (`APACHE_STARTED_BY_SYSTEMD=true`) : il lance alors le binaire `apache2` directement.
+>
+> Les avertissements `AH00558 … fully qualified domain name` sont sans conséquence.
 
 ---
 
@@ -189,7 +192,7 @@ curl localhost
 On peut aussi exécuter une commande ponctuelle dans le chroot sans y entrer :
 
 ```bash
-chroot /root/ubuntu /etc/init.d/apache2 status
+chroot /root/ubuntu pgrep -a apache2
 chroot /root/ubuntu apt list --installed 2>/dev/null | wc -l
 ```
 
@@ -202,7 +205,7 @@ bind supprime le contenu du **`/dev` de l'hôte** et casse la machine.
 
 ```bash
 # 1. Arrêter le service
-chroot /root/ubuntu /etc/init.d/apache2 stop
+chroot /root/ubuntu env APACHE_STARTED_BY_SYSTEMD=true apache2ctl stop
 
 # 2. Démonter, dans l'ordre inverse du montage
 umount /root/ubuntu/dev/pts
@@ -254,5 +257,6 @@ rm -rf /root/ubuntu
 | `E: Invalid Release file` | Suite inexistante ou EOL (ex. `bionic`) | Utiliser `noble` ; vérifier `ls /usr/share/debootstrap/scripts/` |
 | `chroot: failed to run /bin/bash: Exec format error` | Architecture incompatible | Vérifier `--arch`, ou installer `qemu-user-static` |
 | `apt-get update` sans réseau dans le chroot | `resolv.conf` non copié | `cp /etc/resolv.conf /root/ubuntu/etc/` |
+| `Running in chroot, ignoring command 'start'` | `systemctl` / `init.d` refusent dans un chroot | `APACHE_STARTED_BY_SYSTEMD=true apache2ctl start` |
 | `Address already in use` sur le port 80 | Un serveur tourne déjà sur l'hôte | `ss -tlnp \| grep :80` puis arrêter le service |
 | `umount: target is busy` | Un processus est encore dans le chroot | `fuser -vm /root/ubuntu`, tuer, puis `umount -R` |
